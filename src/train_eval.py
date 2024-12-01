@@ -36,7 +36,7 @@ def train_with_cv(model, X, y, device, n_splits=10, epochs=300, batch_size=32, l
     # 早停参数（调整为更严格的值）
     initial_patience = 20  # 减少初始耐心值
     min_patience = 5      # 减少最小耐心值
-    patience_decay = 0.8  # 加快耐心衰减
+    patience_decay = 0.7  # 加快耐心衰减
     min_lr = 1e-6
     improvement_threshold = 1e-4
     max_epochs_without_improvement = 50  # 添加最大无改善轮数限制
@@ -201,7 +201,6 @@ def evaluate_models(models, X_test, y_test, scaler, device):
     评估所有模型的性能
     """
     results = {}
-    ensemble_predictions = []
     
     # 准备测试数据
     X_test_2d = X_test.reshape(X_test.shape[0], -1)
@@ -214,17 +213,23 @@ def evaluate_models(models, X_test, y_test, scaler, device):
                 predictions = model(X_test_tensor).cpu().numpy()
         else:  # SVR
             predictions = model.predict(X_test_2d)
-            predictions = predictions.reshape(-1, 1)
         
-        ensemble_predictions.append(predictions)
+        # 确保predictions是2D数组
+        predictions = predictions.reshape(-1, 1)
+        
+        # 确保y_test是2D数组
+        y_test_2d = y_test.reshape(-1, 1)
+        
+        # 为scaler.inverse_transform准备数据
+        pred_padded = np.zeros((len(predictions), scaler.n_features_in_))
+        pred_padded[:, 0] = predictions.ravel()
+        
+        y_test_padded = np.zeros((len(y_test_2d), scaler.n_features_in_))
+        y_test_padded[:, 0] = y_test_2d.ravel()
         
         # 反向转换预测值和真实值
-        predictions_orig = scaler.inverse_transform(
-            np.concatenate([predictions, np.zeros((len(predictions), scaler.n_features_in_-1))], axis=1)
-        )[:, 0]
-        y_test_orig = scaler.inverse_transform(
-            np.concatenate([y_test.reshape(-1, 1), np.zeros((len(y_test), scaler.n_features_in_-1))], axis=1)
-        )[:, 0]
+        predictions_orig = scaler.inverse_transform(pred_padded)[:, 0]
+        y_test_orig = scaler.inverse_transform(y_test_padded)[:, 0]
         
         # 计算评估指标
         mse = mean_squared_error(y_test_orig, predictions_orig)
@@ -238,42 +243,49 @@ def evaluate_models(models, X_test, y_test, scaler, device):
             'r2': r2
         }
     
-    # 添加集成模型结果
-    ensemble_pred = np.mean(ensemble_predictions, axis=0)
-    ensemble_pred_orig = scaler.inverse_transform(
-        np.concatenate([ensemble_pred, np.zeros((len(ensemble_pred), scaler.n_features_in_-1))], axis=1)
-    )[:, 0]
-    
-    results['Ensemble'] = {
-        'predictions': ensemble_pred_orig,
-        'mse': mean_squared_error(y_test_orig, ensemble_pred_orig),
-        'mae': mean_absolute_error(y_test_orig, ensemble_pred_orig),
-        'r2': r2_score(y_test_orig, ensemble_pred_orig)
-    }
-    
     return results
 
 def plot_results(results, actual_values, dates, title='NASDAQ Index Prediction'):
     """
-    可视化预测结果
+    可视化预测结果：生成两个独立图表，一个显示实际范围，一个从0开始显示
     """
+    colors = ['red', 'blue', 'green', 'purple']
+    
+    # 第一个图：实际范围
     plt.figure(figsize=(15, 10))
     plt.plot(dates, actual_values, label='Actual', color='black', alpha=0.7, linewidth=2)
-    
-    colors = ['red', 'blue', 'green', 'purple', 'orange']
-    
     for (name, result), color in zip(results.items(), colors):
         plt.plot(dates, result['predictions'], 
                 label=f'{name}\nMSE: {result["mse"]:.2f}\nMAE: {result["mae"]:.2f}\nR²: {result["r2"]:.3f}', 
                 color=color, alpha=0.6)
     
-    plt.title(title, fontsize=14, pad=20)
+    plt.title(f'{title} (Actual Range)', fontsize=14, pad=20)
     plt.xlabel('Date', fontsize=12)
     plt.ylabel('NASDAQ Index', fontsize=12)
     plt.grid(True, alpha=0.3)
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10)
     plt.xticks(rotation=45)
     plt.tight_layout()
+    plt.savefig('prediction_results_actual_range.png', bbox_inches='tight', dpi=300)
+    plt.show()
+    
+    # 第二个图：从0开始的范围
+    plt.figure(figsize=(15, 10))
+    plt.plot(dates, actual_values, label='Actual', color='black', alpha=0.7, linewidth=2)
+    for (name, result), color in zip(results.items(), colors):
+        plt.plot(dates, result['predictions'], 
+                label=f'{name}\nMSE: {result["mse"]:.2f}\nMAE: {result["mae"]:.2f}\nR²: {result["r2"]:.3f}', 
+                color=color, alpha=0.6)
+    
+    plt.title(f'{title} (From Zero)', fontsize=14, pad=20)
+    plt.xlabel('Date', fontsize=12)
+    plt.ylabel('NASDAQ Index', fontsize=12)
+    plt.grid(True, alpha=0.3)
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10)
+    plt.xticks(rotation=45)
+    plt.ylim(bottom=0)  # 设置y轴从0开始
+    plt.tight_layout()
+    plt.savefig('prediction_results_from_zero.png', bbox_inches='tight', dpi=300)
     plt.show()
 
 def weight_reset(m):
