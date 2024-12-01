@@ -47,7 +47,7 @@ class CNN(nn.Module):
         x = self.dropout(x)
         x = self.fc2(x)
         
-        return x
+        return x.squeeze()
 
 class LSTM(nn.Module):
     def __init__(self, input_size, hidden_size=256, num_layers=3):
@@ -78,10 +78,11 @@ class LSTM(nn.Module):
     def forward(self, x):
         # LSTM层
         lstm_out, _ = self.lstm(x)
-        
+        # 只取最后一个时间步的输出
+        last_output = lstm_out[:, -1, :]
         # 全连接层
-        out = self.fc(lstm_out)
-        return out
+        out = self.fc(last_output)
+        return out.squeeze()
 
 class MLP(nn.Module):
     def __init__(self, input_size):
@@ -101,4 +102,4 @@ class MLP(nn.Module):
         
     def forward(self, x):
         x = x.view(x.shape[0], -1)
-        return self.layers(x) 
+        return self.layers(x).squeeze() 

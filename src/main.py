@@ -1,6 +1,6 @@
 from data_loader import fetch_stock_data, prepare_data
 from models import CNN, LSTM, MLP
-from train_eval import train_model, evaluate_models, plot_results, train_with_cv
+from train_eval import evaluate_models, plot_results, train_with_cv
 from sklearn.svm import SVR
 import torch
 import numpy as np
@@ -44,11 +44,11 @@ def main():
                 model, 
                 X_train_full, 
                 y_train_full,
-                device=device,  # 传入设备参数
-                n_splits=3,
-                epochs=100,
-                batch_size=16,
-                learning_rate=0.001
+                device=device,
+                n_splits=10,
+                epochs=300,
+                batch_size=32,
+                learning_rate=0.0005
             )
         else:  # SVR
             model.fit(X_train_full.reshape(X_train_full.shape[0], -1), y_train_full.ravel())
@@ -72,6 +72,7 @@ def main():
         print(f"\n{name} Results:")
         print(f"MSE: {result['mse']:.4f}")
         print(f"MAE: {result['mae']:.4f}")
+        print(f"R²: {result['r2']:.4f}")
 
 if __name__ == "__main__":
     main() 
